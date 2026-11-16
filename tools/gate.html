@@ -57,16 +57,44 @@ button:disabled{opacity:.6;cursor:default}
   function un64(s){ var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
   function norm(s){ return (s || '').trim().toLowerCase(); }
 
+  function fail(kind, err){ var e = new Error(kind); e.detail = err && (err.name + ': ' + err.message); return e; }
+
+  // Swap the page for the real site without document.write: parse it, move
+  // the head and body over, then re-create each script so it runs in order.
+  function show(html){
+    var doc = new DOMParser().parseFromString(html, 'text/html');
+    document.title = doc.title;
+    var el = document.documentElement;
+    Array.prototype.forEach.call(doc.documentElement.attributes, function(a){ el.setAttribute(a.name, a.value); });
+    document.head.innerHTML = doc.head.innerHTML;
+    document.body.innerHTML = doc.body.innerHTML;
+    Array.prototype.forEach.call(doc.body.attributes, function(a){ document.body.setAttribute(a.name, a.value); });
+    var old = document.querySelectorAll('script');
+    for (var i = 0; i < old.length; i++) {
+      var s = document.createElement('script');
+      Array.prototype.forEach.call(old[i].attributes, function(a){ s.setAttribute(a.name, a.value); });
+      s.text = old[i].text;
+      old[i].parentNode.replaceChild(s, old[i]);
+    }
+    try { document.dispatchEvent(new Event('DOMContentLoaded')); window.dispatchEvent(new Event('load')); } catch (e) {}
+  }
+
   function open(pass){
-    var c = window.crypto && crypto.subtle;
-    if (!c) return Promise.reject(new Error('nocrypto'));
-    return c.importKey('raw', new TextEncoder().encode(norm(pass)), 'PBKDF2', false, ['deriveKey'])
-      .then(function(base){ return c.deriveKey({ name: 'PBKDF2', salt: un64(LOCK.salt), iterations: LOCK.iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']); })
-      .then(function(key){ return c.decrypt({ name: 'AES-GCM', iv: un64(LOCK.iv) }, key, un64(LOCK.data)); })
+    var c = window.crypto && (crypto.subtle || crypto.webkitSubtle);
+    if (!c || !window.TextEncoder) return Promise.reject(fail('nocrypto'));
+    var p = norm(pass);
+    return Promise.resolve()
+      .then(function(){ return c.importKey('raw', new TextEncoder().encode(p), { name: 'PBKDF2' }, false, ['deriveKey']); })
+      .then(function(base){ return c.deriveKey({ name: 'PBKDF2', salt: un64(LOCK.salt), iterations: LOCK.iter, hash: { name: 'SHA-256' } }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']); })
+      .catch(function(err){ throw fail('nocrypto', err); })
+      .then(function(key){
+        return c.decrypt({ name: 'AES-GCM', iv: un64(LOCK.iv) }, key, un64(LOCK.data))
+          .catch(function(err){ throw fail(err && err.name === 'OperationError' ? 'wrong' : 'nocrypto', err); });
+      })
       .then(function(buf){
-        try { localStorage.setItem(KEY, norm(pass)); } catch (e) {}
+        try { localStorage.setItem(KEY, p); } catch (e) {}
         var html = new TextDecoder().decode(buf), hash = location.hash;
-        document.open(); document.write(html); document.close();
+        try { show(html); } catch (err) { throw fail('show', err); }
         if (hash) setTimeout(function(){ var t = document.getElementById(hash.slice(1)); if (t) t.scrollIntoView(); }, 60);
       });
   }
@@ -83,9 +111,10 @@ button:disabled{opacity:.6;cursor:default}
     open(pw.value).catch(function(err){
       go.disabled = false;
       msg.className = 'msg err';
-      msg.textContent = err && err.message === 'nocrypto'
-        ? 'This browser can’t open the site. Please try Safari, Chrome, or Firefox.'
-        : 'That’s not quite it. Please try again.';
+      var kind = err && err.message;
+      msg.textContent = kind === 'wrong'
+        ? 'That’s not quite it. Please try again.'
+        : 'Sorry, the site couldn’t open in this browser. (' + (kind || 'error') + (err && err.detail ? ', ' + err.detail : '') + ')';
       card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
       pw.select();
     });
