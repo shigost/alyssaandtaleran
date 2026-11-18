@@ -17,7 +17,8 @@ const SRC = join(root, 'site.html');
 const OUT = join(root, 'index.html');
 const ITER = 600000;
 
-const pass = (process.argv[2] || '').trim().toLowerCase();
+// same rule as the password screen: only letters and numbers count, capitals ignored
+const pass = (process.argv[2] || '').toLowerCase().normalize('NFKC').replace(/[^a-z0-9]/g, '');
 if (!pass) { console.error('Add the password: node tools/lock.mjs yourpassword'); process.exit(1); }
 if (!existsSync(SRC)) { console.error('site.html is missing. Put the real site in site.html first.'); process.exit(1); }
 

@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const pass = (process.argv[2] || '').trim().toLowerCase();
+// same rule as the password screen: only letters and numbers count, capitals ignored
+const pass = (process.argv[2] || '').toLowerCase().normalize('NFKC').replace(/[^a-z0-9]/g, '');
 if (!pass) { console.error('Add the password: node tools/unlock.mjs yourpassword'); process.exit(1); }
 
 const html = readFileSync(join(root, 'index.html'), 'utf8');

@@ -42,7 +42,7 @@ button:disabled{opacity:.6;cursor:default}
   <p>Welcome! Please enter the password from your invitation.</p>
   <form id="f">
     <label class="sr" for="pw">Password</label>
-    <input id="pw" type="password" autocomplete="current-password" autocapitalize="none" spellcheck="false" placeholder="Password" required>
+    <input id="pw" type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="Password" required>
     <button id="go" type="submit">Enter</button>
   </form>
   <p class="msg" id="msg" role="status" aria-live="polite"></p>
@@ -55,7 +55,8 @@ button:disabled{opacity:.6;cursor:default}
   var card = document.getElementById('card'), f = document.getElementById('f'), pw = document.getElementById('pw'),
       go = document.getElementById('go'), msg = document.getElementById('msg');
   function un64(s){ var b = atob(s), u = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
-  function norm(s){ return (s || '').trim().toLowerCase(); }
+  // forgiving: ignores capitals, spaces, and stray punctuation (an added period, a smart quote), so only the word matters
+  function norm(s){ s = (s || '').toLowerCase(); try { s = s.normalize('NFKC'); } catch (e) {} return s.replace(/[^a-z0-9]/g, ''); }
 
   function fail(kind, err){ var e = new Error(kind); e.detail = err && (err.name + ': ' + err.message); return e; }
 
